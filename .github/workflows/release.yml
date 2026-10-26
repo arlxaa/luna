@@ -1,0 +1,40 @@
+name: Release
+
+# Push a tag like v1.0.0 to publish a GitHub release with both builds attached.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          # Small build: needs the .NET 10 Desktop Runtime installed.
+          dotnet publish src/Luna/Luna.csproj -c Release -r win-x64 -p:Version=$version -o out/small
+          # Standalone build: bundles the runtime, no install needed.
+          dotnet publish src/Luna/Luna.csproj -c Release -r win-x64 --self-contained -p:Version=$version `
+            -p:PublishReadyToRun=false -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true `
+            -o out/standalone
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item out/small/Luna.exe dist/Luna.exe
+          Copy-Item out/standalone/Luna.exe dist/Luna-standalone.exe
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Luna.exe
+            dist/Luna-standalone.exe
+          generate_release_notes: true
